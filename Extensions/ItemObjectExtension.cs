@@ -172,7 +172,8 @@ public static class ItemObjectExtension {
 	public static bool IsSuitableForCharacter(this ItemObject? item, CharacterObject? character) {
 		return item      != null &&
 			   character != null &&
-			   (item.Difficulty <= 0 || item.Difficulty <= character.GetSkillValue(item.RelevantSkill));
+			   (item.Difficulty <= 0 || item.Difficulty <= character.GetSkillValue(item.RelevantSkill)) &&
+			   (int)item.Tier < character.Tier;
 	}
 
 	public static bool MatchHarness(this ItemObject? horse, ItemObject? harness) {
@@ -203,6 +204,11 @@ public static class ItemObjectExtension {
 			if (item.HasArmorComponent && other.HasArmorComponent) {
 				var materialComparison = item.ArmorComponent.MaterialType.CompareTo(other.ArmorComponent.MaterialType);
 				if (materialComparison != 0) return materialComparison;
+				var armor1 = item.ArmorComponent;
+				var armor2 = other.ArmorComponent;
+				var armorComparison = (armor1.ArmArmor + armor1.BodyArmor + armor1.LegArmor + armor1.HeadArmor).CompareTo(
+					armor2.ArmArmor + armor2.BodyArmor + armor2.LegArmor + armor2.HeadArmor);
+				if (armorComparison != 0) return armorComparison;
 			}
 
 			// Value 低的排在 Value 高的前面

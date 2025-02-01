@@ -66,14 +66,15 @@ public static class Global {
 															ItemObject.ItemTypeEnum.Polearm,
 															ItemObject.ItemTypeEnum.Arrows,
 															ItemObject.ItemTypeEnum.Bolts,
-															ItemObject.ItemTypeEnum.Thrown
+															ItemObject.ItemTypeEnum.Thrown,
+															ItemObject.ItemTypeEnum.Shield,
 														};
 
 	public static WeaponClass[] InvalidWeaponClasses = {
 														   WeaponClass.Undefined,
 														   WeaponClass.Boulder,
 														   WeaponClass.Banner,
-														   WeaponClass.Stone
+														//    WeaponClass.Stone
 													   };
 
 	private static readonly Dictionary<ItemObject.ItemTypeEnum, CraftingTemplate[]> CraftingTemplatesByItemType = new();

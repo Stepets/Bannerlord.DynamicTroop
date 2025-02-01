@@ -1,9 +1,12 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using Bannerlord.DynamicTroop.Extensions;
+using log4net.Core;
 using TaleWorlds.CampaignSystem;
 using TaleWorlds.Core;
+using TaleWorlds.Library;
 using TaleWorlds.LinQuick;
 using static TaleWorlds.Core.ItemObject;
 
@@ -24,6 +27,8 @@ public class Assignment : IComparable {
 	public readonly Equipment Equipment;
 	
 	private bool _isAssigned;
+
+	private Random _random = new();
 	
 	public Assignment(CharacterObject character) {
 		_lock.EnterWriteLock();
@@ -85,6 +90,9 @@ public class Assignment : IComparable {
 	
 	public bool HaveTwoHandedWeaponOrPolearms =>
 		WeaponSlots.AnyQ(slot => GetEquipmentFromSlot(slot) is { IsEmpty: false, Item: { } item } && (item.IsTwoHanded() || item.IsPolearm()));
+
+	public bool HaveOneHandedPolearms =>
+		WeaponSlots.AnyQ(slot => GetEquipmentFromSlot(slot) is { IsEmpty: false, Item: { } item } && (item.IsOneHanded() && item.IsPolearm()));
 	
 	public EquipmentIndex? EmptyWeaponSlot
 	{
@@ -170,36 +178,59 @@ public class Assignment : IComparable {
 	}
 	
 	public void FillEmptySlots() {
-		foreach (var slot in Global.ArmourSlots) {
+		Global.Log($"FillEmptySlots() character {Character.Name} tier {Character.Tier} culture {Character.Culture.GetCultureCode()}", Colors.Yellow, Level.Debug);
+
+		foreach (var slot in Global.EquipmentSlots) {
 			var referenceEquipment = ReferenceEquipment.GetEquipmentFromSlot(slot);
-			if (GetEquipmentFromSlot(slot) is not { IsEmpty: false, Item: not null }) {
-				var itemType = Helper.EquipmentIndexToItemEnumType(slot);
-				if (!itemType.HasValue) continue;
-				
-				ItemObject? item;
-				if (referenceEquipment is { IsEmpty: false, Item: not null }) {
-					List<ItemObject> itemList         = new() { referenceEquipment.Item };
-					var              itemsByCharacter = Cache.GetItemsByTypeTierAndCulture(itemType.Value, Character.Tier, Character.Culture);
-					if (itemsByCharacter != null) itemList.AddRange(itemsByCharacter);
-					
-					if (referenceEquipment.Item.Culture is CultureObject cultureObject) {
-						var itemsByReference = Cache.GetItemsByTypeTierAndCulture(itemType.Value, (int)referenceEquipment.Item.Tier, cultureObject);
-						if (itemsByReference != null) itemList.AddRange(itemsByReference);
-					}
-					
-					item = WeightedRandomSelector.SelectItem(itemList, referenceEquipment.Item.Effectiveness);
+			ItemObject? item = null;
+			if (!referenceEquipment.IsEmpty) {
+				var itemType = referenceEquipment.Item.ItemType;
+
+				// item = WeightedRandomSelector.SelectItem(Cache.GetEquipmentByTypeTierAndCulture(itemType.Value, Character.Tier, Character.Culture).ToListQ(), referenceEquipment.Item.Effectiveness);
+				item = Cache.GetEquipmentByTypeTierAndCulture(itemType, Character.Tier, Character.Culture.GetCultureCode())?.GetRandomElement();
+				if (item == null) {
+					item = Cache.GetEquipmentByTypeTierAndCulture(itemType, Character.Tier, CultureCode.Invalid)?.GetRandomElement();
 				}
-				else {
-					item = Cache.GetItemsByTypeTierAndCulture(itemType.Value, Character.Tier, Character.Culture)?.GetRandomElement();
-					if (item == null) continue;
-				}
-				
-				SetEquipment(slot, new EquipmentElement(item));
+			// } else {
+			// 	if (_random.NextFloat() > Character.Tier / 5f) { continue; }
+
+			// 	ItemTypeEnum itemType = ItemTypeEnum.Invalid;
+			// 	if (EquipmentIndex.WeaponItemBeginSlot <= slot && slot < EquipmentIndex.NumPrimaryWeaponSlots) {
+			// 		if (IsUnarmed) { itemType = ItemTypeEnum.OneHandedWeapon; }
+			// 		else if (!IsShielded && CanBeShielded) { itemType = _random.NextFloat() > 0.5f ? ItemTypeEnum.Shield : ItemTypeEnum.TwoHandedWeapon; }
+			// 		else if (!HaveOneHandedPolearms) { itemType = ItemTypeEnum.Polearm; }
+			// 		else { itemType = ItemTypeEnum.Thrown; }
+			// 	} else if (EquipmentIndex.ArmorItemBeginSlot <= slot && slot < EquipmentIndex.ArmorItemEndSlot) {
+			// 		if (slot == EquipmentIndex.Head) {
+			// 			itemType = ItemTypeEnum.HeadArmor;
+			// 		}
+			// 		if (slot == EquipmentIndex.Body)
+			// 		{
+			// 			itemType = ItemTypeEnum.BodyArmor;
+			// 		}
+			// 		if (slot == EquipmentIndex.Cape)
+			// 		{
+			// 			itemType = ItemTypeEnum.Cape;
+			// 		}
+			// 		if (slot == EquipmentIndex.Gloves)
+			// 		{
+			// 			itemType = ItemTypeEnum.HandArmor;
+			// 		}
+			// 		if (slot == EquipmentIndex.Leg)
+			// 		{
+			// 			itemType = ItemTypeEnum.LegArmor;
+			// 		}
+			// 	}
+			// 	item = Cache.GetEquipmentByTypeTierAndCulture(itemType, Character.Tier - 1, Character.Culture)?.GetRandomElement();
+				Global.Log($"slot {slot} type {itemType} item {item?.Tier}#{item?.Name}", Colors.White, Level.Debug);
 			}
+			if (item == null) continue;
+
+			SetEquipment(slot, new EquipmentElement(item));
 		}
 		
-		foreach (var slot in Global.EquipmentSlots)
-			if (GetEquipmentFromSlot(slot) is not { IsEmpty: false, Item: not null })
-				SetEquipment(slot, ReferenceEquipment.GetEquipmentFromSlot(slot));
+		// foreach (var slot in Global.EquipmentSlots)
+		// 	if (GetEquipmentFromSlot(slot) is not { IsEmpty: false, Item: not null })
+		// 		SetEquipment(slot, ReferenceEquipment.GetEquipmentFromSlot(slot));
 	}
 }

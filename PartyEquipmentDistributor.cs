@@ -1,6 +1,8 @@
 using System;
+using System.Collections;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Collections.Specialized;
 using System.Linq;
 using System.Threading.Tasks;
 using Bannerlord.DynamicTroop.Comparers;
@@ -282,29 +284,34 @@ public class PartyEquipmentDistributor {
 							 .OrderByDescending(equipment => equipment.Key.Item.Tier)
 							 .ThenByDescending(equipment => equipment.Key.Item.Value);
 		
-		LinkedList<KeyValuePair<EquipmentElement, int>> equipmentDeque = new(equipmentQuery);
+		OrderedDictionary equipmentInventory = new();
+
+		foreach (var eq in equipmentQuery) {
+			equipmentInventory.Add(eq.Key, eq.Value);
+		}
 		
-		if (!equipmentDeque.AnyQ()) { return; }
+		if (equipmentInventory.Count == 0) { return; }
 		
 		foreach (var assignment in Assignments) {
 			if (assignmentFilter(assignment)) {
 				var slot = assignment.EmptyWeaponSlot;
 				if (!slot.HasValue) { continue; }
-				
-				var equipmentNode      = equipmentDeque.First;
-				var equipment          = equipmentNode.Value;
-				var equipmentItem      = equipment.Key;
-				var equipmentItemCount = equipment.Value;
+
+				DictionaryEntry? equipmentRecord = equipmentInventory.Cast<DictionaryEntry?>().FirstOrDefault(e => (int)((EquipmentElement)e.Value.Key).Item.Tier < assignment.Character.Tier);
+				if (equipmentRecord == null) { continue; }
+				var equipment = equipmentRecord.Value;
+				var equipmentItem  = (EquipmentElement)equipment.Key;
+				var equipmentItemCount = (int)equipment.Value;
 				
 				assignment.SetEquipment(slot.Value, equipmentItem);
 				Global.Debug($"extra equipment {equipmentItem} assigned to {assignment.Character.StringId}#{assignment.Index} on slot {slot.Value} for {_party.Name}");
 				equipmentItemCount--;
 				if (_equipmentToAssign[equipmentItem] > 0) { _equipmentToAssign[equipmentItem]--; }
 				
-				if (equipmentItemCount > 0) { equipmentNode.Value = new KeyValuePair<EquipmentElement, int>(equipmentItem, equipmentItemCount); }
-				else { equipmentDeque.RemoveFirst(); }
+				if (equipmentItemCount > 0) { equipment.Value = equipmentItemCount; }
+				else { equipmentInventory.Remove(equipmentItem); }
 				
-				if (!equipmentDeque.AnyQ()) { return; }
+				if (equipmentInventory.Count == 0) { return; }
 			}
 		}
 	}
@@ -409,9 +416,9 @@ public class PartyEquipmentDistributor {
 		foreach (var assignment in Assignments) {
 			if (itemType is ItemObject.ItemTypeEnum.Horse or ItemObject.ItemTypeEnum.HorseHarness && !assignment.IsMounted) { continue; }
 			
-			var currentItemIndex = Array.FindIndex(armours, i => i.Value > 0);
+			var currentItemIndex = Array.FindIndex(armours, i => (int)i.Key.Item.Tier < assignment.Character.Tier && i.Value > 0);
 			if (currentItemIndex == -1) {
-				break; // 没有更多可用装备时退出循环
+				continue;
 			}
 			
 			var currentItem = armours[currentItemIndex];
@@ -454,8 +461,17 @@ public class PartyEquipmentDistributor {
 		var availableWeapon = _equipmentToAssign
 							  .AsParallel()
 							  .WhereQ(equipment => IsWeaponSuitable(equipment.Key, referenceWeapon.Item, assignment, strict))
-							  .OrderByDescending(equipment => (int)equipment.Key.Item.Tier + equipment.Key.Item.CalculateWeaponTierBonus(mounted))
-							  .ThenByDescending(equipment => equipment.Key.Item.Value)
+							  .OrderByDescending(equipment => (int)equipment.Key.Item.Tier * 10 + equipment.Key.Item.CalculateWeaponTierBonus(mounted))
+							  .ThenByDescending(equipment => {
+									var item = equipment.Key.Item;
+									var weapon = item.WeaponComponent.PrimaryWeapon;
+									if (weapon.IsMeleeWeapon || weapon.IsPolearm) {
+										return Math.Max(
+											weapon.SwingDamage * weapon.SwingDamageFactor * weapon.SwingSpeed,
+											weapon.ThrustDamage * weapon.ThrustDamageFactor * weapon.ThrustSpeed);
+									}
+									return item.Value;
+								})
 							  .Take(1)
 							  .ToListQ();
 		
@@ -482,8 +498,18 @@ public class PartyEquipmentDistributor {
 		var availableWeapon = _equipmentToAssign
 							  .AsParallel()
 							  .WhereQ(equipment => IsWeaponSuitableByType(equipment, referenceWeapon.Item.ItemType, assignment, strict))
-							  .OrderByDescending(equipment => (int)equipment.Key.Item.Tier + equipment.Key.Item.CalculateWeaponTierBonus(mounted))
-							  .ThenByDescending(equipment => equipment.Key.Item.Value)
+							  .OrderByDescending(equipment => (int)equipment.Key.Item.Tier * 10 + equipment.Key.Item.CalculateWeaponTierBonus(mounted))
+							  .ThenByDescending(equipment => {
+								  var item = equipment.Key.Item;
+								  var weapon = item.WeaponComponent.PrimaryWeapon;
+								  if (weapon.IsMeleeWeapon || weapon.IsPolearm)
+								  {
+									  return Math.Max(
+										  weapon.SwingDamage * weapon.SwingDamageFactor * weapon.SwingSpeed,
+										  weapon.ThrustDamage * weapon.ThrustDamageFactor * weapon.ThrustSpeed);
+								  }
+								  return item.Value;
+							  })
 							  .Take(1)
 							  .ToListQ();
 		

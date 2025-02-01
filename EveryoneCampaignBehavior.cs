@@ -51,13 +51,14 @@ public class EveryoneCampaignBehavior : CampaignBehaviorBase {
 	public static readonly Dictionary<ItemObject.ItemTypeEnum, List<ItemObject>> ItemListByType = new();
 
 	private static void InitializeItemListByType() {
-		foreach (var itemType in Global.ItemTypes) {
+		foreach (var itemType in Enum.GetValues(typeof(ItemObject.ItemTypeEnum)).Cast<ItemObject.ItemTypeEnum>()) {
 			var items = MBObjectManager.Instance.GetObjectTypeList<ItemObject>()
 									   ?.WhereQ(item => item != null && item.ItemType == itemType)
 									   ?.OrderByQ(item => item.Tier)
 									   ?.ThenBy(item => item.Value)
 									   .ToListQ();
 
+			Global.Debug($"item type {itemType} is {items.SelectQ(i => $"tier {i.Tier} culture {i.Culture?.GetCultureCode()} # {i.Name} civ {i.IsCivilian} flags {i.ItemFlags}").Aggregate("", (a, b) => $"{a}\n{b}")}");
 			ItemListByType[itemType] = items ?? new List<ItemObject>();
 		}
 	}
